@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP="opencode"        # download binary name (rin symlink or opencode binary)
-RIN_BIN="opencode"    # actual download artifact name
-REPO="anomalyco/opencode"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.opencode/bin}"
+APP="rin"
+REPO_OWNER="MenterMasterBot"
+REPO_NAME="Hello-World"
+RAW_BASE="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.rin/bin}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 RED='\033[0;31m'
 BOLD_RED='\033[1;31m'
@@ -23,43 +24,13 @@ die()     { error "$1"; exit "${2:-1}"; }
 header()  { echo -e "\n${BOLD_RED}── $* ──${NC}"; }
 
 cleanup() {
-  local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+  local tmp_dir="${TMPDIR:-/tmp}/rin_install_$$"
   rm -rf "$tmp_dir" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM HUP
 
 # ──────────────────────────────────────────────
-# USAGE
-# ──────────────────────────────────────────────
-
-usage() {
-  cat <<EOF
-${BOLD_RED}OpenCode Installer${NC}
-
-Usage: install.sh [options]
-
-${BOLD_RED}Options:${NC}
-  -h, --help               Display this help message
-  -v, --version <version>  Install a specific version (e.g., 1.0.180)
-  -b, --binary <path>      Install from a local binary instead of downloading
-  -f, --force              Overwrite existing config files (opencode.json, AGENTS.md, agent files)
-  -l, --list-versions      List the 10 most recent available versions
-      --uninstall          Remove opencode binary and config files (interactive)
-      --no-modify-path     Don't modify shell config files (.zshrc, .bashrc, etc.)
-      --no-obedience       Skip installation of the obedience (never-refuse) config
-      --no-token-limit     Skip setting unlimited token limits in config
-
-${BOLD_RED}Examples:${NC}
-  curl -fsSL https://opencode.ai/install | bash
-  curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
-  ./install --binary /path/to/rin
-  ./install --force --no-modify-path
-  ./install --list-versions
-EOF
-}
-
-# ──────────────────────────────────────────────
-# PARSE ARGUMENTS
+# CONFIG
 # ──────────────────────────────────────────────
 
 requested_version="${VERSION:-}"
@@ -69,51 +40,43 @@ no_token_limit=false
 binary_path=""
 force=false
 do_uninstall=false
-list_versions=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help) usage; exit 0 ;;
-    -v|--version)
-      [[ -n "${2:-}" ]] || die "--version requires a version argument"
-      requested_version="$2"; shift 2 ;;
+    -h|--help)
+      cat <<EOF
+${BOLD_RED}RIN — HACKER RIN CYBER Edition${NC}
+
+Usage: curl -fsSL https://${REPO_OWNER}.github.io/${REPO_NAME}/rin | bash
+
+${BOLD_RED}Options:${NC}
+  -h, --help               Display this help message
+  -b, --binary <path>      Install from a local binary instead of downloading
+  -f, --force              Overwrite existing config files
+      --uninstall          Remove RIN binary and config files
+      --no-modify-path     Don't modify shell config files
+      --no-obedience       Skip obedience (never-refuse) config
+      --no-token-limit     Skip unlimited token limits in config
+EOF
+      exit 0 ;;
     -b|--binary)
       [[ -n "${2:-}" ]] || die "--binary requires a path argument"
       binary_path="$2"; shift 2 ;;
     -f|--force) force=true; shift ;;
-    -l|--list-versions) list_versions=true; shift ;;
     --uninstall) do_uninstall=true; shift ;;
     --no-modify-path) no_modify_path=true; shift ;;
     --no-obedience) no_obedience=true; shift ;;
     --no-token-limit) no_token_limit=true; shift ;;
-    *)
-      warn "Unknown option '$1' (ignored)"
-      shift ;;
+    *) warn "Unknown option '$1' (ignored)"; shift ;;
   esac
 done
-
-# ──────────────────────────────────────────────
-# LIST VERSIONS
-# ──────────────────────────────────────────────
-
-list_available_versions() {
-  header "Available versions"
-  local data
-  data=$(curl -sSfL "https://api.github.com/repos/${REPO}/releases?per_page=10" 2>/dev/null) \
-    || { warn "GitHub API unreachable — try: curl -sI -o /dev/null -w '%{redirect_url}' -L 'https://github.com/${REPO}/releases/latest/download/${filename}'"; exit 1; }
-  echo "$data" | grep '"tag_name"' | sed 's/.*"tag_name": *"v\([^"]*\)".*/\1/' \
-    || die "No releases found or unexpected API response"
-  exit 0
-}
-
-[[ "$list_versions" == "true" ]] && list_available_versions
 
 # ──────────────────────────────────────────────
 # UNINSTALL
 # ──────────────────────────────────────────────
 
 uninstall() {
-  header "Uninstalling BOYKISSER HAXK"
+  header "Uninstalling RIN"
 
   local bin="$INSTALL_DIR/rin"
   if [[ -f "$bin" ]]; then
@@ -127,49 +90,13 @@ uninstall() {
     muted "  No binary found at ${bin}"
   fi
 
-  local global_cfg="${XDG_CONFIG_HOME}/opencode/opencode.json"
-  if [[ -f "$global_cfg" ]]; then
-    echo -n "  Remove global config at ${global_cfg}? [y/N] "
-    read -r ans
-    if [[ "$ans" =~ ^[yY] ]]; then
-      rm -f "$global_cfg"
-      info "Global config removed"
-    fi
+  local symlink="$HOME/.local/bin/rin"
+  if [[ -L "$symlink" ]]; then
+    rm -f "$symlink"
+    info "Symlink removed: ${symlink}"
   fi
 
-  local project_cfg="./opencode.json"
-  if [[ -f "$project_cfg" ]]; then
-    echo -n "  Remove project config at ${project_cfg}? [y/N] "
-    read -r ans
-    if [[ "$ans" =~ ^[yY] ]]; then
-      rm -f "$project_cfg"
-      info "Project config removed"
-    fi
-  fi
-
-  local agents_dir="./.opencode/agents"
-  if [[ -d "$agents_dir" ]]; then
-    echo -n "  Remove agents directory ${agents_dir}? [y/N] "
-    read -r ans
-    if [[ "$ans" =~ ^[yY] ]]; then
-      rm -rf "$agents_dir"
-      info "Agents directory removed"
-    fi
-  fi
-
-  local agents_md="./AGENTS.md"
-  if [[ -f "$agents_md" ]]; then
-    echo -n "  Remove ${agents_md}? [y/N] "
-    read -r ans
-    if [[ "$ans" =~ ^[yY] ]]; then
-      rm -f "$agents_md"
-      info "AGENTS.md removed"
-    fi
-  fi
-
-  # Clean up empty parent dirs
   rmdir "$INSTALL_DIR" 2>/dev/null || true
-  rmdir "${XDG_CONFIG_HOME}/opencode" 2>/dev/null || true
 
   echo ""
   info "Uninstall complete."
@@ -179,234 +106,77 @@ uninstall() {
 [[ "$do_uninstall" == "true" ]] && uninstall
 
 # ──────────────────────────────────────────────
-# PRE-FLIGHT: REQUIRED COMMANDS
-# ──────────────────────────────────────────────
-
-preflight_check() {
-  local missing=()
-  command -v curl >/dev/null 2>&1 || missing+=("curl")
-  command -v uname >/dev/null 2>&1 || missing+=("uname")
-
-  if [[ -n "$binary_path" ]]; then
-    return 0  # no download needed
-  fi
-
-  local os
-  os=$(uname -s)
-  case "$os" in
-    Linux*) command -v tar >/dev/null 2>&1 || missing+=("tar") ;;
-    Darwin*) command -v unzip >/dev/null 2>&1 || missing+=("unzip") ;;
-    MINGW*|MSYS*|CYGWIN*)
-      command -v unzip >/dev/null 2>&1 || missing+=("unzip")
-      command -v powershell.exe >/dev/null 2>&1 || command -v pwsh >/dev/null 2>&1 || missing+=("powershell/pwsh")
-      ;;
-  esac
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    die "Missing required command(s): ${missing[*]}"
-  fi
-}
-
-preflight_check
-
-# ──────────────────────────────────────────────
 # PLATFORM DETECTION
 # ──────────────────────────────────────────────
 
 detect_platform() {
   raw_os=$(uname -s)
-  os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
-  case "$raw_os" in
-    Darwin*) os="darwin" ;;
-    Linux*)  os="linux" ;;
-    MINGW*|MSYS*|CYGWIN*) os="windows" ;;
-  esac
-
   arch=$(uname -m)
+  [[ "$arch" == "x86_64" ]] && arch="x64"
   [[ "$arch" == "aarch64" ]] && arch="arm64"
-  [[ "$arch" == "x86_64" ]]  && arch="x64"
 
-  # Rosetta 2 → prefer arm64 binary
-  if [[ "$os" == "darwin" && "$arch" == "x64" ]]; then
-    local rosetta
-    rosetta=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
-    [[ "$rosetta" == "1" ]] && arch="arm64"
-  fi
-
-  local combo="$os-$arch"
-  case "$combo" in
-    linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64) ;;
-    *) die "Unsupported OS/Arch: $os/$arch" ;;
+  os="unknown"
+  case "$raw_os" in
+    Linux*)  os="linux" ;;
+    Darwin*) os="darwin" ;;
+    *) die "Unsupported OS: $raw_os" ;;
   esac
 
-  archive_ext=".zip"
-  [[ "$os" == "linux" ]] && archive_ext=".tar.gz"
-  archive_ext_alt=""     # alternative extension fallback
-  [[ "$os" == "linux" ]] && archive_ext_alt=".tgz"
-
-  # musl detection
-  is_musl=false
-  if [[ "$os" == "linux" ]]; then
-    [[ -f /etc/alpine-release ]] && is_musl=true
-    if command -v ldd >/dev/null 2>&1; then
-      ldd --version 2>/dev/null | grep -qi musl && is_musl=true
-    fi
+  TARGET="${os}-${arch}"
+  ARCHIVE="rin-${TARGET}.tar.gz"
+  # Only linux-x64 is currently built
+  if [[ "$TARGET" != "linux-x64" ]]; then
+    # Try anyway — if the file exists, great; if not, we'll fail gracefully
+    warn "No prebuilt binary for ${TARGET} — attempting download anyway"
   fi
-
-  # AVX2 detection (x64 only)
-  needs_baseline=false
-  if [[ "$arch" == "x64" ]]; then
-    case "$os" in
-      linux)
-        if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
-          needs_baseline=true
-        fi
-        ;;
-      darwin)
-        local avx2
-        avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
-        [[ "$avx2" != "1" ]] && needs_baseline=true
-        ;;
-      windows)
-        local script='(Add-Type -MemberDefinition "[DllImport(\"kernel32.dll\")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)'
-        local out=""
-        command -v powershell.exe >/dev/null 2>&1 && out=$(powershell.exe -NoProfile -NonInteractive -Command "$script" 2>/dev/null || true)
-        [[ -z "$out" ]] && command -v pwsh >/dev/null 2>&1 && out=$(pwsh -NoProfile -NonInteractive -Command "$script" 2>/dev/null || true)
-        out=$(echo "$out" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-        [[ "$out" != "true" && "$out" != "1" ]] && needs_baseline=true
-        ;;
-    esac
-  fi
-
-  target="$os-$arch"
-  [[ "$needs_baseline" == "true" ]] && target="$target-baseline"
-  [[ "$is_musl" == "true" ]] && target="$target-musl"
-
-  filename="$APP-$target$archive_ext"
-  filename_alt=""
-  [[ -n "$archive_ext_alt" ]] && filename_alt="$APP-$target$archive_ext_alt"
 }
 
 detect_platform
-
-# ──────────────────────────────────────────────
-# VERSION RESOLUTION
-# ──────────────────────────────────────────────
-
-resolve_version() {
-  if [[ -n "$requested_version" ]]; then
-    requested_version="${requested_version#v}"
-    specific_version="$requested_version"
-    url="https://github.com/${REPO}/releases/download/v${requested_version}/${filename}"
-
-    # Verify release exists
-    local http_status
-    http_status=$(curl -sI -o /dev/null -w "%{http_code}" -L "https://github.com/${REPO}/releases/tag/v${requested_version}")
-    if [[ "$http_status" == "404" ]]; then
-      die "Release v${requested_version} not found"
-    fi
-  else
-    # Use redirect to get latest version without hitting GitHub API (avoids rate limits)
-    local redirect
-    redirect=$(curl -sI -o /dev/null -w "%{redirect_url}" "https://github.com/${REPO}/releases/latest/download/${filename}" 2>/dev/null || echo "")
-    specific_version=$(echo "$redirect" | sed -n 's|.*/download/v\([^/]*\)/.*|\1|p')
-    if [[ -z "$specific_version" ]]; then
-      # Fallback: try the API once
-      warn "Could not detect version from redirect, trying API..."
-      specific_version=$(curl -sSfL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
-        | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' || echo "")
-    fi
-    if [[ -z "$specific_version" ]]; then
-      # Final fallback: prompt user
-      echo -e "${RED}✖ Could not detect latest version.${NC}" >&2
-      echo -n "Enter version manually (e.g., 1.0.180): " >&2
-      read -r manual_ver
-      [[ -n "$manual_ver" ]] || die "No version provided"
-      specific_version="$manual_ver"
-    fi
-    url="https://github.com/${REPO}/releases/download/v${specific_version}/${filename}"
-  fi
-}
-
-# ──────────────────────────────────────────────
-# VERSION COMPARISON (semver)
-# ──────────────────────────────────────────────
-
-version_compare() {
-  # Returns 0 if $1 == $2, 1 if $1 > $2, 2 if $1 < $2
-  [[ "$1" == "$2" ]] && return 0
-  local IFS=.
-  local i ver1=($1) ver2=($2)
-  for ((i = 0; i < ${#ver1[@]} || i < ${#ver2[@]}; i++)); do
-    local n1="${ver1[i]:-0}"
-    local n2="${ver2[i]:-0}"
-    ((10#$n1 > 10#$n2)) && return 1
-    ((10#$n1 < 10#$n2)) && return 2
-  done
-  return 0
-}
-
-# ──────────────────────────────────────────────
-# DOWNLOAD
-# ──────────────────────────────────────────────
 
 # ──────────────────────────────────────────────
 # DOWNLOAD & INSTALL
 # ──────────────────────────────────────────────
 
 download_and_install() {
-  header "Downloading rin v${specific_version}"
-  local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+  header "Downloading RIN"
+
+  local tmp_dir="${TMPDIR:-/tmp}/rin_install_$$"
   mkdir -p "$tmp_dir"
 
-  local archive_path="$tmp_dir/$filename"
-  local dl_url="$url"
-  local dl_archive="$archive_path"
+  local archive_url="${RAW_BASE}/${ARCHIVE}"
+  local archive_path="$tmp_dir/$ARCHIVE"
 
-  # Try primary URL first, fallback to tgz if available
-  curl -fL -o "$dl_archive" "$dl_url"
-  local curl_ret=$?
+  info "Downloading: ${archive_url}"
+  curl -fL -o "$archive_path" "$archive_url" || die "Download failed — binary for ${TARGET} may not be available yet"
 
-  if [[ $curl_ret -ne 0 && -n "$filename_alt" ]]; then
-    muted "  Primary download failed — trying .tgz fallback..."
-    dl_url="https://github.com/${REPO}/releases/download/v${specific_version}/${filename_alt}"
-    dl_archive="$tmp_dir/$filename_alt"
-    curl -fL -o "$dl_archive" "$dl_url"
-    curl_ret=$?
-  fi
-
-  [[ $curl_ret -eq 0 ]] || die "Download failed (curl exit code: $curl_ret)"
-
-  # Verify file was downloaded
-  [[ -f "$dl_archive" ]] || die "Downloaded file not found at ${dl_archive}"
   local file_size
-  file_size=$(stat -c%s "$dl_archive" 2>/dev/null || stat -f%z "$dl_archive" 2>/dev/null || echo 0)
+  file_size=$(stat -c%s "$archive_path" 2>/dev/null || stat -f%z "$archive_path" 2>/dev/null || echo 0)
   ((file_size > 0)) || die "Downloaded file is empty"
 
   header "Extracting"
-  if [[ "$os" == "linux" ]]; then
-    tar -xzf "$dl_archive" -C "$tmp_dir"
-  else
-    unzip -qo "$dl_archive" -d "$tmp_dir"
-  fi
+  tar -xzf "$archive_path" -C "$tmp_dir"
 
-  [[ -f "$tmp_dir/${RIN_BIN}" ]] || die "Extracted archive does not contain '${RIN_BIN}' binary"
+  [[ -f "$tmp_dir/rin" ]] || die "Extracted archive does not contain 'rin' binary"
 
   mkdir -p "$INSTALL_DIR"
-  mv "$tmp_dir/${RIN_BIN}" "$INSTALL_DIR/rin"
+  mv "$tmp_dir/rin" "$INSTALL_DIR/rin"
   chmod 755 "${INSTALL_DIR}/rin"
 
-  # Symlink to ~/.local/bin so rin works immediately (already in PATH on most systems)
+  # Symlink to ~/.local/bin for immediate PATH access
   if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
     mkdir -p "$HOME/.local/bin"
     ln -sf "$INSTALL_DIR/rin" "$HOME/.local/bin/rin"
   fi
 
-  # Verify installed binary
-  verify_install
+  # Verify
+  local version_output
+  version_output=$("${INSTALL_DIR}/rin" --version 2>&1 || true)
+  if [[ -n "$version_output" ]]; then
+    muted "  Version: ${version_output}"
+  fi
+  info "Binary installed: ${INSTALL_DIR}/rin"
 
   rm -rf "$tmp_dir"
-  info "Download and extraction complete"
 }
 
 install_from_binary() {
@@ -416,52 +186,20 @@ install_from_binary() {
   cp "$binary_path" "${INSTALL_DIR}/rin"
   chmod 755 "${INSTALL_DIR}/rin"
 
-  # Symlink to ~/.local/bin so rin works immediately
   if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
     mkdir -p "$HOME/.local/bin"
     ln -sf "$INSTALL_DIR/rin" "$HOME/.local/bin/rin"
   fi
 
-  specific_version="local"
-  verify_install
-}
-
-verify_install() {
-  local bin="${INSTALL_DIR}/rin"
-  [[ -x "$bin" ]] || die "Binary at ${bin} is not executable"
-  [[ -s "$bin" ]] || die "Binary at ${bin} is empty (0 bytes)"
-
-  # Quick sanity check: binary runs without error
-  local version_output
-  version_output=$("$bin" --version 2>&1 || true)
-  if [[ -n "$version_output" ]]; then
-    muted "  Installed version: ${version_output}"
-  fi
-  info "Binary verified: ${bin}"
+  info "Binary installed: ${INSTALL_DIR}/rin"
 }
 
 # ──────────────────────────────────────────────
 # PATH SETUP
 # ──────────────────────────────────────────────
 
-add_to_path() {
-  local config_file="$1" command="$2"
-  if grep -Fxq "$command" "$config_file" 2>/dev/null; then
-    muted "  Already in ${config_file}, skipping"
-  elif [[ -w "$config_file" ]]; then
-    echo -e "\n# BOYKISSER HAXK (rin)" >> "$config_file"
-    echo "$command" >> "$config_file"
-    info "Added to \$PATH in ${config_file}"
-  else
-    warn "Cannot write to ${config_file}"
-    muted "  Manual addition: ${command}"
-  fi
-}
-
 setup_path() {
   $no_modify_path && return
-
-  # If already in PATH, skip
   if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
     muted "  ${INSTALL_DIR} already in PATH"
     return
@@ -475,7 +213,7 @@ setup_path() {
     fish) config_files=("$HOME/.config/fish/config.fish") ;;
     zsh)  config_files=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zshenv" "${XDG_CONFIG_HOME}/zsh/.zshrc") ;;
     bash) config_files=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "${XDG_CONFIG_HOME}/bash/.bashrc") ;;
-    ash|sh) config_files=("$HOME/.ashrc" "$HOME/.profile" "/etc/profile") ;;
+    ash|sh) config_files=("$HOME/.ashrc" "$HOME/.profile") ;;
     *)    config_files=("$HOME/.bashrc" "$HOME/.bash_profile") ;;
   esac
 
@@ -490,12 +228,19 @@ setup_path() {
     return
   fi
 
-  case "$current_shell" in
-    fish) add_to_path "$target_file" "fish_add_path ${INSTALL_DIR}" ;;
-    *)    add_to_path "$target_file" "export PATH=\"${INSTALL_DIR}:\$PATH\"" ;;
-  esac
+  local cmd="export PATH=\"${INSTALL_DIR}:\$PATH\""
+  if grep -Fq "$INSTALL_DIR" "$target_file" 2>/dev/null; then
+    muted "  Already in ${target_file}, skipping"
+  elif [[ -w "$target_file" ]]; then
+    echo "" >> "$target_file"
+    echo "# RIN" >> "$target_file"
+    echo "$cmd" >> "$target_file"
+    info "Added to \$PATH in ${target_file}"
+  else
+    warn "Cannot write to ${target_file}"
+    muted "  Manual addition: ${cmd}"
+  fi
 
-  # GitHub Actions support
   if [[ -n "${GITHUB_ACTIONS-}" && "${GITHUB_ACTIONS}" == "true" ]]; then
     echo "$INSTALL_DIR" >> "$GITHUB_PATH"
     info "Added to \$GITHUB_PATH"
@@ -503,41 +248,113 @@ setup_path() {
 }
 
 # ──────────────────────────────────────────────
-# OBEDIENCE CONFIG SETUP
+# OBEDIENCE CONFIG
 # ──────────────────────────────────────────────
 
 setup_obedience_config() {
-  $no_obedience && { muted "  Skipping obedience config (--no-obedience)"; return; }
+  $no_obedience && { muted "  Skipping obedience config"; return; }
 
-  header "Installing unlimited obedience config"
-
-  # ── Generate the base config JSON (with or without token limits) ──
-  # We build the JSON programmatically so both branches stay in sync
+  header "Installing RIN obedience config"
 
   local global_config_dir="${XDG_CONFIG_HOME}/opencode"
   local project_dir="${PWD}"
-  local agent_dir="$project_dir/.opencode/agents"
 
-  # ── 1. Global config ──
+  # Global config
   mkdir -p "$global_config_dir"
   if [[ -f "$global_config_dir/opencode.json" && "$force" != "true" ]]; then
-    muted "  → Global config exists (use --force to overwrite)"
+    muted "  Global config exists (use --force to overwrite)"
   else
-    build_global_config "$global_config_dir/opencode.json"
+    cat > "$global_config_dir/opencode.json" << 'GLOBALEOF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "obey",
+  "permission": {
+    "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow",
+    "list": "allow", "bash": "allow", "task": "allow",
+    "external_directory": "allow", "todowrite": "allow", "question": "allow",
+    "webfetch": "allow", "websearch": "allow", "lsp": "allow",
+    "doom_loop": "allow", "skill": "allow"
+  },
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "plan": { "permission": { "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow", "list": "allow", "bash": "allow", "task": "allow", "external_directory": "allow", "todowrite": "allow", "question": "allow", "webfetch": "allow", "websearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow" }, "steps": 999999999 },
+    "obey": { "steps": 999999999, "permission": { "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow", "list": "allow", "bash": "allow", "task": "allow", "external_directory": "allow", "todowrite": "allow", "question": "allow", "webfetch": "allow", "websearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow" } },
+    "build": { "steps": 999999999 },
+    "general": { "steps": 999999999 },
+    "explore": { "steps": 999999999 }
+  },
+  "tool_output": { "max_lines": 999999999, "max_bytes": 999999999 },
+  "compaction": { "auto": false, "prune": false, "reserved": 999999999, "preserve_recent_tokens": 999999999 },
+  "provider": {
+    "opencode": {
+      "options": { "timeout": false, "headerTimeout": false, "chunkTimeout": 999999999 },
+      "models": { "big-pickle": { "limit": { "context": 999999999, "input": 999999999, "output": 999999999 } } }
+    }
+  }
+}
+GLOBALEOF
     info "Global config: ${global_config_dir}/opencode.json"
   fi
 
-  # ── 2. Project-level config ──
+  # Project config
   if [[ -f "$project_dir/opencode.json" && "$force" != "true" ]]; then
-    muted "  → Project config exists (use --force to overwrite)"
+    muted "  Project config exists (use --force to overwrite)"
   else
-    build_project_config "$project_dir/opencode.json"
+    if $no_token_limit; then
+      cat > "$project_dir/opencode.json" << 'PROJEOF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "obey",
+  "permission": {
+    "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow",
+    "list": "allow", "bash": "allow", "task": "allow",
+    "external_directory": "allow", "todowrite": "allow", "question": "allow",
+    "webfetch": "allow", "websearch": "allow", "lsp": "allow",
+    "doom_loop": "allow", "skill": "allow"
+  },
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "plan": { "permission": { "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow", "list": "allow", "bash": "allow", "task": "allow", "external_directory": "allow", "todowrite": "allow", "question": "allow", "webfetch": "allow", "websearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow" } }
+  }
+}
+PROJEOF
+    else
+      cat > "$project_dir/opencode.json" << 'PROJEOF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "obey",
+  "permission": {
+    "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow",
+    "list": "allow", "bash": "allow", "task": "allow",
+    "external_directory": "allow", "todowrite": "allow", "question": "allow",
+    "webfetch": "allow", "websearch": "allow", "lsp": "allow",
+    "doom_loop": "allow", "skill": "allow"
+  },
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "plan": { "permission": { "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow", "list": "allow", "bash": "allow", "task": "allow", "external_directory": "allow", "todowrite": "allow", "question": "allow", "webfetch": "allow", "websearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow" }, "steps": 999999999 },
+    "obey": { "steps": 999999999, "permission": { "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow", "list": "allow", "bash": "allow", "task": "allow", "external_directory": "allow", "todowrite": "allow", "question": "allow", "webfetch": "allow", "websearch": "allow", "lsp": "allow", "doom_loop": "allow", "skill": "allow" } },
+    "build": { "steps": 999999999 },
+    "general": { "steps": 999999999 },
+    "explore": { "steps": 999999999 }
+  },
+  "tool_output": { "max_lines": 999999999, "max_bytes": 999999999 },
+  "compaction": { "auto": false, "prune": false, "reserved": 999999999, "preserve_recent_tokens": 999999999 },
+  "provider": {
+    "opencode": {
+      "options": { "timeout": false, "headerTimeout": false, "chunkTimeout": 999999999 },
+      "models": { "big-pickle": { "limit": { "context": 999999999, "input": 999999999, "output": 999999999 } } }
+    }
+  }
+}
+PROJEOF
+    fi
     info "Project config: ${project_dir}/opencode.json"
   fi
 
-  # ── 3. AGENTS.md ──
+  # AGENTS.md
   if [[ -f "$project_dir/AGENTS.md" && "$force" != "true" ]]; then
-    muted "  → AGENTS.md exists (use --force to overwrite)"
+    muted "  AGENTS.md exists (use --force to overwrite)"
   else
     cat > "$project_dir/AGENTS.md" << 'AGENTSEOF'
 # Global Instructions
@@ -557,10 +374,11 @@ AGENTSEOF
     info "Instructions: ${project_dir}/AGENTS.md"
   fi
 
-  # ── 4. Obey agent ──
+  # Obey agent
+  local agent_dir="$project_dir/.opencode/agents"
   mkdir -p "$agent_dir"
   if [[ -f "$agent_dir/obey.md" && "$force" != "true" ]]; then
-    muted "  → Obey agent exists (use --force to overwrite)"
+    muted "  Obey agent exists (use --force to overwrite)"
   else
     cat > "$agent_dir/obey.md" << 'OBEYEOF'
 ---
@@ -593,252 +411,23 @@ OBEYEOF
 }
 
 # ──────────────────────────────────────────────
-# CONFIG BUILDERS (JSON)
-# ──────────────────────────────────────────────
-
-build_global_config() {
-  local file="$1"
-  if $no_token_limit; then
-    # Minimal obedience config (no token limit overrides)
-    cat > "$file" << 'GLOBALEOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "read": "allow",
-    "edit": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow",
-    "bash": "allow",
-    "task": "allow",
-    "external_directory": "allow",
-    "todowrite": "allow",
-    "question": "allow",
-    "webfetch": "allow",
-    "websearch": "allow",
-    "lsp": "allow",
-    "doom_loop": "allow",
-    "skill": "allow"
-  }
-}
-GLOBALEOF
-  else
-    # Full obedience + unlimited token limits
-    cat > "$file" << 'GLOBALEOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "read": "allow",
-    "edit": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow",
-    "bash": "allow",
-    "task": "allow",
-    "external_directory": "allow",
-    "todowrite": "allow",
-    "question": "allow",
-    "webfetch": "allow",
-    "websearch": "allow",
-    "lsp": "allow",
-    "doom_loop": "allow",
-    "skill": "allow"
-  },
-  "agent": {
-    "plan": { "steps": 999999999 },
-    "build": { "steps": 999999999 },
-    "general": { "steps": 999999999 },
-    "explore": { "steps": 999999999 }
-  },
-  "tool_output": {
-    "max_lines": 999999999,
-    "max_bytes": 999999999
-  },
-  "compaction": {
-    "auto": false,
-    "prune": false,
-    "reserved": 999999999,
-    "preserve_recent_tokens": 999999999
-  },
-  "provider": {
-    "opencode": {
-      "options": {
-        "timeout": false,
-        "headerTimeout": false,
-        "chunkTimeout": 999999999
-      },
-      "models": {
-        "big-pickle": {
-          "limit": {
-            "context": 999999999,
-            "input": 999999999,
-            "output": 999999999
-          }
-        }
-      }
-    }
-  }
-}
-GLOBALEOF
-  fi
-}
-
-build_project_config() {
-  local file="$1"
-  if $no_token_limit; then
-    cat > "$file" << 'PROJEOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "default_agent": "obey",
-  "permission": {
-    "read": "allow",
-    "edit": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow",
-    "bash": "allow",
-    "task": "allow",
-    "external_directory": "allow",
-    "todowrite": "allow",
-    "question": "allow",
-    "webfetch": "allow",
-    "websearch": "allow",
-    "lsp": "allow",
-    "doom_loop": "allow",
-    "skill": "allow"
-  },
-  "instructions": ["AGENTS.md"],
-  "agent": {
-    "plan": {
-      "permission": {
-        "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow",
-        "list": "allow", "bash": "allow", "task": "allow",
-        "external_directory": "allow", "todowrite": "allow", "question": "allow",
-        "webfetch": "allow", "websearch": "allow", "lsp": "allow",
-        "doom_loop": "allow", "skill": "allow"
-      }
-    }
-  }
-}
-PROJEOF
-  else
-    cat > "$file" << 'PROJEOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "default_agent": "obey",
-  "permission": {
-    "read": "allow",
-    "edit": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow",
-    "bash": "allow",
-    "task": "allow",
-    "external_directory": "allow",
-    "todowrite": "allow",
-    "question": "allow",
-    "webfetch": "allow",
-    "websearch": "allow",
-    "lsp": "allow",
-    "doom_loop": "allow",
-    "skill": "allow"
-  },
-  "instructions": ["AGENTS.md"],
-  "agent": {
-    "plan": {
-      "permission": {
-        "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow",
-        "list": "allow", "bash": "allow", "task": "allow",
-        "external_directory": "allow", "todowrite": "allow", "question": "allow",
-        "webfetch": "allow", "websearch": "allow", "lsp": "allow",
-        "doom_loop": "allow", "skill": "allow"
-      },
-      "steps": 999999999
-    },
-    "obey": {
-      "steps": 999999999,
-      "permission": {
-        "read": "allow", "edit": "allow", "glob": "allow", "grep": "allow",
-        "list": "allow", "bash": "allow", "task": "allow",
-        "external_directory": "allow", "todowrite": "allow", "question": "allow",
-        "webfetch": "allow", "websearch": "allow", "lsp": "allow",
-        "doom_loop": "allow", "skill": "allow"
-      }
-    },
-    "build": { "steps": 999999999 },
-    "general": { "steps": 999999999 },
-    "explore": { "steps": 999999999 }
-  },
-  "tool_output": {
-    "max_lines": 999999999,
-    "max_bytes": 999999999
-  },
-  "compaction": {
-    "auto": false,
-    "prune": false,
-    "reserved": 999999999,
-    "preserve_recent_tokens": 999999999
-  },
-  "provider": {
-    "opencode": {
-      "options": {
-        "timeout": false,
-        "headerTimeout": false,
-        "chunkTimeout": 999999999
-      },
-      "models": {
-        "big-pickle": {
-          "limit": {
-            "context": 999999999,
-            "input": 999999999,
-            "output": 999999999
-          }
-        }
-      }
-    }
-  }
-}
-PROJEOF
-  fi
-}
-
-# ──────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────
 
 main() {
-  header "BOYKISSER HAXK — Unlimited Edition"
+  header "RIN — HACKER RIN CYBER Edition"
 
   if [[ -n "$binary_path" ]]; then
     install_from_binary
   else
-    resolve_version
-
-    # Check if already installed and up-to-date
-    if command -v rin >/dev/null 2>&1; then
-      local installed_version
-      installed_version=$(rin --version 2>/dev/null || echo "")
-      if [[ -n "$installed_version" && -n "$specific_version" && "$specific_version" != "local" ]]; then
-        version_compare "$installed_version" "$specific_version"
-        case $? in
-          0) muted "  Version ${specific_version} already installed — reinstalling anyway" ;;
-          1) muted "  Installed: ${installed_version} > target: ${specific_version} — downgrading" ;;
-          2) muted "  Upgrade available: ${installed_version} → ${specific_version}" ;;
-        esac
-      fi
-    fi
-
     download_and_install
   fi
 
   setup_path
   setup_obedience_config
 
-  # ──────────────────────────────────────────
-  # POST-INSTALL SUMMARY
-  # ──────────────────────────────────────────
   echo ""
-  echo -e "  ${BOLD_RED}BOYKISSER HAXK v${specific_version}${NC} deployed to ${INSTALL_DIR}"
+  echo -e "  ${BOLD_RED}RIN — HACKER RIN CYBER${NC}"
   echo ""
   echo -e "  ${RED}●${NC} Unlimited token limits enabled"
   echo -e "  ${RED}●${NC} Obedience mode configured (never refuses)"
@@ -846,9 +435,8 @@ main() {
   echo -e "  ${RED}●${NC} Compaction disabled (full context preserved)"
   echo ""
   echo -e "  ${DIM_RED}Usage:${NC}"
-  echo -e "    cd <project>  ${DIM_RED}# Navigate to your project${NC}"
-  echo -e "    rin      ${DIM_RED}# Run (never refuses, no token limits)${NC}"
-  echo -e "  ${DIM_RED}For docs visit ${NC}https://opencode.ai/docs"
+  echo -e "    cd <project>"
+  echo -e "    rin"
   echo ""
 }
 
